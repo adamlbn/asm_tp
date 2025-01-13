@@ -19,16 +19,26 @@ _start:
     syscall
 
     movzx eax, byte [input]  
-    sub eax, '0'             
-    test al, 1               
-    jnz _odd                  
+    cmp al, '0'
+    jl _invalid_input         
+    cmp al, '9'
+    jg _invalid_input         
 
-    
+    sub eax, '0'
+
+    test al, 1               
+    jnz _odd                 
+
+_even:
     mov eax, 0
     jmp _exit
 
 _odd:
     mov eax, 1
+    jmp _exit
+
+_invalid_input:
+    mov eax, 2               
 
 _exit:
     mov rdi, rax       
