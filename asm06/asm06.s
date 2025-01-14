@@ -1,76 +1,123 @@
-global _start
+section .data
+    result_msg db "", 0
+    result_msg_len equ $ - result_msg
+    buffer db 0
+    error_msg db "Error: No input provided", 0
+    error_msg_len equ $ - error_msg
 
 section .bss
-    input resb 32  ; Réservation de 32 octets pour l'entrée utilisateur
+    num1 resq 1
+    num2 resq 1
+    result resq 1
+    temp resb 21  
 
 section .text
+    global _start
+
 _start:
+    ; Check if parameters are present
+    cmp qword [rsp + 16], 0
+    je .no_input_error
+    cmp qword [rsp + 24], 0
+    je .no_input_error
 
-    ; Lecture de l'entrée utilisateur
-    mov rax, 0      ; Code syscall pour sys_read
-    mov rdi, 0      ; Descripteur de fichier stdin
-    mov rsi, input ; Pointeur vers l'emplacement où stocker l'entrée
-    mov rdx, 32     ; Nombre maximum d'octets à lire
+    ; Convert first parameter to integer
+    mov rsi, [rsp + 16]  
+    mov rdi, num1
+    call string_to_int
+
+    ; Convert second parameter to integer
+    mov rsi, [rsp + 24]  
+    mov rdi, num2
+    call string_to_int
+
+    ; Add the numbers
+    mov rax, [num1]
+    add rax, [num2]
+    mov [result], rax
+    
+    ; Display the result
+    mov rdi, 1         
+    mov rsi, result_msg
+    mov rdx, result_msg_len
+    mov rax, 1          
     syscall
 
-    ; Conversion de la chaîne d'entrée en nombre entier
-    mov rdi, 0      ; Indice pour parcourir la chaîne d'entrée
-    xor r8, r8      ; Initialise le résultat à zéro
-    xor rax, rax    ; Réinitialisation d'AL à zéro
-convert_loop:
-    mov al, [input + rdi]  ; Charge un caractère de la chaîne d'entrée dans AL
-    cmp al, 10             ; Comparaison avec la valeur ASCII de la nouvelle ligne
-    je input_done          ; Si c'est une nouvelle ligne, terminer la saisie
-    cmp al, '0'            ; Comparaison avec le caractère '0'
-    jl error               ; Si c'est inférieur à '0', c'est une erreur
-    cmp al, '9'            ; Comparaison avec le caractère '9'
-    jg error               ; Si c'est supérieur à '9', c'est une erreur
-    sub al, 48             ; Convertit le caractère ASCII en nombre entier
-    imul r8, r8, 10        ; Multiplie le résultat actuel par 10
-    add r8, rax            ; Ajoute la valeur convertie
-    inc rdi                ; Passage au prochain caractère
-    jmp convert_loop       ; Boucle pour le prochain caractère
+    ; Convert result to string
+    mov rax, [result]
+    mov rdi, temp        
+    call int_to_string
+    mov rsi, rdi        
+    call print_string
 
-input_done:
-    ; Vérification de la primalité du nombre
-    xor rdi, rdi       ; Réinitialisation de RDI à zéro pour utilisation future
-    xor rax, rax       ; Réinitialisation de RAX à zéro
-    mov rcx, 2         ; Débute la vérification à partir de 2
-
-    cmp r8, 1          ; Si le nombre est égal à 1
-    je not_prime       ; Il n'est pas premier
-
-    cmp r8, 2          ; Si le nombre est égal à 2
-    je prime           ; Il est premier
-
-check_loop:
-    xor rdx, rdx       ; Réinitialisation de RDX à zéro
-    mov rax, r8        ; Charge le nombre à vérifier dans RAX
-    div rcx            ; Divise RAX par RCX, le quotient est stocké dans RAX et le reste dans RDX
-    cmp rdx, 0         ; Vérifie si le reste est zéro
-    je check           ; Si oui, le nombre n'est pas premier
-    inc rcx            ; Passe au prochain nombre pour la vérification
-    jmp check_loop    ; Boucle pour le prochain nombre
-
-check:
-    cmp rcx, r8        ; Comparaison de RCX avec le nombre d'origine
-    je prime           ; Si RCX est égal au nombre d'origine, le nombre est premier
-    jne not_prime      ; Sinon, le nombre n'est pas premier
-
-prime:
-    ; Si le nombre est premier, retourner 0
-    mov rax, 60      ; Code syscall pour sys_exit
-    mov rdi, 0       ; Code de retour 0
+    ; Exit
+    mov rax, 60          
+    xor rdi, rdi        
     syscall
 
-not_prime:
-    ; Si le nombre n'est pas premier, retourner 1
-    mov rax, 60      ; Code syscall pour sys_exit
-    mov rdi, 1       ; Code de retour 1
+.no_input_error:
+    ; Display error message
+    mov rdi, 1
+    mov rsi, error_msg
+    mov rdx, error_msg_len
+    mov rax, 1
     syscall
 
-error:
-    ; Gestion des erreurs
-    mov rax, 60      ; Code syscall pour sys_exit
-    mov rdi, 1       ; Code de retour 1 pour les erreurs
+    ; Exit with error
+    mov rax, 60
+    mov rdi, 1
     syscall
+
+
+string_to_int:
+    xor rax, rax
+    xor rcx, rcx
+.loop:
+    movzx rdx, byte [rsi + rcx]
+    cmp rdx, 0
+    je .end
+    sub rdx, '0'
+    imul rax, rax, 10
+    add rax, rdx
+    inc rcx
+    jmp .loop
+.end:
+    mov [rdi], rax
+    ret
+
+
+int_to_string:
+    mov rcx, 10
+    mov rbx, 0           
+    add rdi, 20         
+    mov byte [rdi], 0    
+    dec rdi
+.convert_loop:
+    xor rdx, rdx
+    div rcx
+    add dl, '0'
+    mov [rdi], dl
+    dec rdi
+    test rax, rax
+    jnz .convert_loop
+    test rbx, rbx
+    jz .no_sign
+    mov byte [rdi], '-'
+    dec rdi
+.no_sign:
+    inc rdi
+    ret
+
+
+print_string:
+    mov rdx, 0
+    .find_end:
+        cmp byte [rsi + rdx], 0
+        je .found_end
+        inc rdx
+        jmp .find_end
+    .found_end:
+    mov rax, 1
+    mov rdi, 1        
+    syscall
+    ret
