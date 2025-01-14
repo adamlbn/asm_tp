@@ -2,9 +2,6 @@ section .data
     error_msg db "Error: No input provided", 0xA
     error_msg_len equ $ - error_msg
 
-section .bss
-    buffer resb 256
-
 section .text
     global _start
 
@@ -34,12 +31,15 @@ no_input_error:
 
 print_string:
     xor rdx, rdx
-.find_end:
-    cmp byte [rsi + rdx], 0
-    je .found_end
+    mov rcx, rsi
+.next_char:
+    cmp byte [rcx], 0
+    je .done
     inc rdx
-    jmp .find_end
-.found_end:
+    inc rcx
+    jmp .next_char
+.done:
     mov rax, 1
+    mov rdi, 1
     syscall
     ret
