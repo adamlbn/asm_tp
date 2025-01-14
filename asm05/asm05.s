@@ -1,5 +1,5 @@
 section .data
-    error_msg db "Error: No input provided", 0xA
+    error_msg db "No param !", 0xA
     error_msg_len equ $ - error_msg
 
 section .bss
@@ -29,7 +29,7 @@ no_input_error:
     syscall
 
     mov rax, 60
-    mov rdi, 1
+    xor rdi, rdi
     syscall
 
 print_string:
