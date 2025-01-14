@@ -15,55 +15,46 @@ section .text
     global _start
 
 _start:
-    ; Check if parameters are present
     cmp qword [rsp + 16], 0
     je .no_input_error
     cmp qword [rsp + 24], 0
     je .no_input_error
 
-    ; Convert first parameter to integer
     mov rsi, [rsp + 16]  
     mov rdi, num1
     call string_to_int
 
-    ; Convert second parameter to integer
     mov rsi, [rsp + 24]  
     mov rdi, num2
     call string_to_int
 
-    ; Add the numbers
     mov rax, [num1]
     add rax, [num2]
     mov [result], rax
     
-    ; Display the result
     mov rdi, 1         
     mov rsi, result_msg
     mov rdx, result_msg_len
     mov rax, 1          
     syscall
 
-    ; Convert result to string
     mov rax, [result]
     mov rdi, temp        
     call int_to_string
     mov rsi, rdi        
     call print_string
 
-    ; Exit
     mov rax, 60          
     xor rdi, rdi        
     syscall
 
 .no_input_error:
-    ; Display error message
     mov rdi, 1
     mov rsi, error_msg
     mov rdx, error_msg_len
     mov rax, 1
     syscall
 
-    ; Exit with error
     mov rax, 60
     mov rdi, 1
     syscall
@@ -72,6 +63,12 @@ _start:
 string_to_int:
     xor rax, rax
     xor rcx, rcx
+    xor rbx, rbx
+    movzx rdx, byte [rsi]
+    cmp rdx, '-'
+    jne .loop
+    inc rsi
+    mov rbx, 1
 .loop:
     movzx rdx, byte [rsi + rcx]
     cmp rdx, 0
@@ -82,16 +79,24 @@ string_to_int:
     inc rcx
     jmp .loop
 .end:
+    test rbx, rbx
+    jz .positive
+    neg rax
+.positive:
     mov [rdi], rax
     ret
 
 
 int_to_string:
     mov rcx, 10
-    mov rbx, 0           
-    add rdi, 20         
-    mov byte [rdi], 0    
+    mov rbx, 0
+    add rdi, 20
+    mov byte [rdi], 0
     dec rdi
+    test rax, rax
+    jns .convert_loop
+    neg rax
+    mov rbx, 1
 .convert_loop:
     xor rdx, rdx
     div rcx
