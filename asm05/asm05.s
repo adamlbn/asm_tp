@@ -25,7 +25,7 @@ no_param:
     syscall
 
     mov rax, 60
-    xor rdi, rdi
+    mov rdi, 1
     syscall
 
 print_string:
