@@ -1,58 +1,49 @@
 section .bss
-    input resb 256  ; Buffer pour stocker l'entrée
+    input resb 256
 
 section .text
     global _start
 
 _start:
-    ; Lire l'entrée standard
-    mov rax, 0                 ; sys_read
-    mov rdi, 0                 ; stdin
-    mov rsi, input             ; Buffer pour l'entrée
-    mov rdx, 256               ; Taille maximale
+    mov rax, 0
+    mov rdi, 0
+    mov rsi, input
+    mov rdx, 256
     syscall
 
-    ; Vérifier si la lecture a réussi
-    cmp rax, 0                 ; Si aucun octet n'a été lu, quitter
+    cmp rax, 0
     jle _exit
 
-    ; Trouver la longueur de la chaîne (en ignorant le saut de ligne)
-    mov rcx, rax               ; RCX = nombre de caractères lus
-    dec rcx                    ; Ignorer le saut de ligne
+    mov rcx, rax
+    dec rcx
 
-    ; Initialiser les pointeurs pour vérifier le palindrome
-    lea rsi, [input]           ; RSI pointe vers le début de la chaîne
-    lea rdi, [input + rcx - 1] ; RDI pointe vers la fin de la chaîne
+    lea rsi, [input]
+    lea rdi, [input + rcx - 1]
 
 check_palindrome:
-    cmp rsi, rdi               ; Comparer les pointeurs
-    jge is_palindrome          ; Si RSI >= RDI, la chaîne est un palindrome
+    cmp rsi, rdi
+    jge is_palindrome
 
-    ; Comparer les caractères
-    mov al, [rsi]              ; Charger le caractère de gauche
-    mov bl, [rdi]              ; Charger le caractère de droite
-    cmp al, bl                 ; Comparer les caractères
-    jne not_palindrome         ; Si les caractères diffèrent, ce n'est pas un palindrome
+    mov al, [rsi]
+    mov bl, [rdi]
+    cmp al, bl
+    jne not_palindrome
 
-    ; Déplacer les pointeurs
-    inc rsi                    ; Déplacer RSI vers la droite
-    dec rdi                    ; Déplacer RDI vers la gauche
-    jmp check_palindrome       ; Répéter
+    inc rsi
+    dec rdi
+    jmp check_palindrome
 
 is_palindrome:
-    ; Retourner 0 (c'est un palindrome)
-    mov rax, 60                ; sys_exit
-    xor rdi, rdi               ; Code de retour 0
+    mov rax, 60
+    xor rdi, rdi
     syscall
 
 not_palindrome:
-    ; Retourner 1 (ce n'est pas un palindrome)
-    mov rax, 60                ; sys_exit
-    mov rdi, 1                 ; Code de retour 1
+    mov rax, 60
+    mov rdi, 1
     syscall
 
 _exit:
-    ; Quitter le programme (cas d'erreur)
-    mov rax, 60                ; sys_exit
-    mov rdi, 1                 ; Code de retour 1
+    mov rax, 60
+    mov rdi, 1
     syscall
