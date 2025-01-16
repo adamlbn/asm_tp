@@ -1,8 +1,10 @@
 section .data
     vowels db "aeiouAEIOU", 0
+    newline db 10
 
 section .bss
     input resb 256
+    output resb 16
 
 section .text
     global _start
@@ -22,7 +24,7 @@ _start:
 count_vowels:
     lodsb
     test al, al
-    jz print_result
+    jz convert_to_string
 
     lea rdi, [vowels]
     mov rdx, 10
@@ -38,14 +40,27 @@ increment_count:
     inc rbx
     jmp count_vowels
 
-print_result:
-    add rbx, '0'
-    mov [input], bl
+convert_to_string:
+    lea rdi, [output + 15]
+    mov byte [rdi], 0
+    mov rax, rbx
 
+convert_loop:
+    dec rdi
+    xor rdx, rdx
+    mov rcx, 10
+    div rcx
+    add dl, '0'
+    mov [rdi], dl
+    test rax, rax
+    jnz convert_loop
+
+print_result:
     mov rax, 1
     mov rdi, 1
-    lea rsi, [input]
-    mov rdx, 1
+    mov rsi, rdi
+    lea rdx, [output + 16]
+    sub rdx, rdi
     syscall
 
     mov rax, 1
@@ -57,6 +72,3 @@ print_result:
     mov rax, 60
     xor rdi, rdi
     syscall
-
-section .data
-    newline db 10
