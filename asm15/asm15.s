@@ -32,7 +32,7 @@ _start:
     syscall
 
     cmp rax, 0
-    jl .exit
+    jl .file_error
 
     mov [fd], rax
 
@@ -76,7 +76,7 @@ _start:
     mov rdi, 1
     syscall
 
-.exit:
+.file_error:
     mov rax, SYS_EXIT
-    xor rdi, rdi
+    mov rdi, 1
     syscall
