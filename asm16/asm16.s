@@ -2,55 +2,64 @@ section .text
 global _start
 
 _start:
-    mov rcx, [rsp]
-    cmp rcx, 2
-    jl no_param
+    ; Vérifier si un argument a été passé
+    mov rcx, [rsp]               ; rsp contient le nombre d'arguments (argc)
+    cmp rcx, 2                   ; Vérifier si argc == 2 (nom du programme + 1 argument)
+    jl no_param                  ; Si argc < 2, aller à no_param
 
-    mov rax, 2
-    mov rdi, [rsp + 16]
-    mov rsi, 2
-    mov rdx, 0
+    ; Ouvrir le fichier
+    mov rax, 2                   ; Appel système open
+    mov rdi, [rsp + 16]          ; Récupérer le nom du fichier (argv[1])
+    mov rsi, 2                   ; O_RDWR
+    mov rdx, 0                   ; Pas de mode nécessaire
     syscall
     test rax, rax
-    js fail_open
-    mov r12, rax
+    js fail_open                 ; Si erreur, aller à fail_open
+    mov r12, rax                 ; Stocker le descripteur de fichier (fd)
 
-    mov rax, 8
-    mov rdi, r12
-    mov rsi, 0x2000
-    mov rdx, 0
+    ; Déplacer le curseur à l'offset 0x2000
+    mov rax, 8                   ; Appel système lseek
+    mov rdi, r12                 ; Descripteur de fichier
+    mov rsi, 0x2000              ; Offset
+    mov rdx, 0                   ; SEEK_SET
     syscall
     test rax, rax
-    js fail_lseek
+    js fail_lseek                ; Si erreur, aller à fail_lseek
 
-    mov rax, 1
-    mov rdi, r12
-    lea rsi, [rel new_message]
-    mov rdx, 5
+    ; Écrire "H4CK"
+    mov rax, 1                   ; Appel système write
+    mov rdi, r12                 ; Descripteur de fichier
+    lea rsi, [rel new_message]   ; Nouveau message
+    mov rdx, 5                   ; Taille du message (4 caractères + saut de ligne)
     syscall
     test rax, rax
-    js fail_write
+    js fail_write                ; Si erreur, aller à fail_write
 
-    mov rax, 3
-    mov rdi, r12
+    ; Fermer le fichier
+    mov rax, 3                   ; Appel système close
+    mov rdi, r12                 ; Descripteur de fichier
     syscall
 
-    mov rax, 60
-    xor rdi, rdi
+    ; Sortie réussie
+    mov rax, 60                  ; Appel système exit
+    xor rdi, rdi                 ; Code de sortie 0
     syscall
 
 no_param:
-    mov rax, 1
-    mov rdi, 1
-    lea rsi, [rel usage_msg]
-    mov rdx, usage_msg_len
+    ; Afficher un message d'usage
+    mov rax, 1                   ; Appel système write
+    mov rdi, 1                   ; stdout
+    lea rsi, [rel usage_msg]     ; Message d'usage
+    mov rdx, usage_msg_len       ; Longueur du message
     syscall
 
-    mov rax, 60
-    mov rdi, 1
+    ; Quitter avec un code d'erreur
+    mov rax, 60                  ; Appel système exit
+    mov rdi, 1                   ; Code de sortie 1
     syscall
 
 fail_open:
+    ; Afficher une erreur d'ouverture
     mov rax, 1
     mov rdi, 1
     lea rsi, [rel open_error]
@@ -59,6 +68,7 @@ fail_open:
     jmp exit
 
 fail_lseek:
+    ; Afficher une erreur de déplacement
     mov rax, 1
     mov rdi, 1
     lea rsi, [rel lseek_error]
@@ -67,6 +77,7 @@ fail_lseek:
     jmp exit
 
 fail_write:
+    ; Afficher une erreur d'écriture
     mov rax, 1
     mov rdi, 1
     lea rsi, [rel write_error]
@@ -75,6 +86,7 @@ fail_write:
     jmp exit
 
 exit:
+    ; Quitter avec un code d'erreur
     mov rax, 60
     mov rdi, 1
     syscall
@@ -82,10 +94,10 @@ exit:
 section .data
 usage_msg db 'Usage: ./asm16 <filename>', 0xA, 0
 usage_msg_len equ $ - usage_msg
-open_error db 'Erreur: impossible d\'ouvrir le fichier.', 0xA, 0
+open_error db 'Erreur: impossible d ouvrir le fichier.', 0xA, 0
 open_error_len equ $ - open_error
-lseek_error db 'Erreur: impossible de déplacer le curseur.', 0xA, 0
+lseek_error db 'Erreur: impossible de deplacer le curseur.', 0xA, 0
 lseek_error_len equ $ - lseek_error
-write_error db 'Erreur: impossible d\'écrire dans le fichier.', 0xA, 0
+write_error db 'Erreur: impossible d ecrire dans le fichier.', 0xA, 0
 write_error_len equ $ - write_error
 new_message db 'H4CK', 0xA
