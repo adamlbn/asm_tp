@@ -1,122 +1,84 @@
-section .data
-    SYS_OPEN  equ 2
-    SYS_READ  equ 0
-    SYS_WRITE equ 1
-    SYS_CLOSE equ 3
-    SYS_EXIT  equ 60
-
-    target_str db "1337", 0xA
-    patch_str db "H4CK", 0xA
-    target_len equ $ - target_str
-    patch_len equ $ - patch_str
-
-    usage db 'Usage: ./asm16 <filename>', 0xa
-    usage_len equ $ - usage
-
-section .bss
-    fd resb 8
-    buffer resb 1024
-
 section .text
 global _start
 
 _start:
-    mov rcx, [rsp]
-    cmp rcx, 2
-    jl .error
+    ; Ouvrir le fichier
+    mov rax, 2                   ; Appel système open
+    lea rdi, [rel filename]      ; Nom du fichier
+    mov rsi, 2                   ; O_RDWR
+    mov rdx, 0                   ; Pas de mode nécessaire
+    syscall
+    test rax, rax
+    js fail_open                 ; Si erreur, aller à fail_open
+    mov r12, rax                 ; Stocker le descripteur de fichier (fd)
 
-    mov rsi, [rsp + 16]
+    ; Déplacer le curseur à l'offset 0x2000
+    mov rax, 8                   ; Appel système lseek
+    mov rdi, r12                 ; Descripteur de fichier
+    mov rsi, 0x2000              ; Offset
+    mov rdx, 0                   ; SEEK_SET
+    syscall
+    test rax, rax
+    js fail_lseek                ; Si erreur, aller à fail_lseek
 
-    mov rdi, rsi
-    mov rsi, 2
-    mov rdx, 0
-    mov rax, SYS_OPEN
+    ; Écrire "H4CK"
+    mov rax, 1                   ; Appel système write
+    mov rdi, r12                 ; Descripteur de fichier
+    lea rsi, [rel new_message]   ; Nouveau message
+    mov rdx, 5                   ; Taille du message (4 caractères + saut de ligne)
+    syscall
+    test rax, rax
+    js fail_write                ; Si erreur, aller à fail_write
+
+    ; Fermer le fichier
+    mov rax, 3                   ; Appel système close
+    mov rdi, r12                 ; Descripteur de fichier
     syscall
 
-    cmp rax, 0
-    jl .file_error
-
-    mov [fd], rax
-
-    mov rdi, [fd]
-    mov rsi, buffer
-    mov rdx, 1024
-    mov rax, SYS_READ
+    ; Sortie réussie
+    mov rax, 60                  ; Appel système exit
+    xor rdi, rdi                 ; Code de sortie 0
     syscall
 
-    mov rdi, [fd]
-    mov rax, SYS_CLOSE
+fail_open:
+    ; Afficher une erreur d'ouverture
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rel open_error]
+    mov rdx, open_error_len
     syscall
+    jmp exit
 
-    mov rcx, rax
-    lea rdi, [buffer]
-    lea rsi, [target_str]
-    mov rdx, target_len
-
-.search_loop:
-    cmp rcx, rdx
-    jl .not_found
-
-    push rdi
-    push rsi
-    push rcx
-    repe cmpsb
-    pop rcx
-    pop rsi
-    pop rdi
-    je .patch
-
-    inc rdi
-    dec rcx
-    jmp .search_loop
-
-.patch:
-    lea rsi, [patch_str]
-    mov rcx, patch_len
-    rep movsb
-
-    mov rdi, [rsp + 16]
-    mov rsi, 0x241
-    mov rdx, 0644o
-    mov rax, SYS_OPEN
+fail_lseek:
+    ; Afficher une erreur de déplacement
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rel lseek_error]
+    mov rdx, lseek_error_len
     syscall
+    jmp exit
 
-    cmp rax, 0
-    jl .file_error
-
-    mov [fd], rax
-
-    mov rdi, [fd]
-    mov rsi, buffer
-    mov rdx, 1024
-    mov rax, SYS_WRITE
+fail_write:
+    ; Afficher une erreur d'écriture
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rel write_error]
+    mov rdx, write_error_len
     syscall
+    jmp exit
 
-    mov rdi, [fd]
-    mov rax, SYS_CLOSE
-    syscall
-
-    mov rax, SYS_EXIT
-    xor rdi, rdi
-    syscall
-
-.not_found:
-    mov rax, SYS_EXIT
+exit:
+    ; Quitter avec un code d'erreur
+    mov rax, 60
     mov rdi, 1
     syscall
 
-.file_error:
-    mov rax, SYS_EXIT
-    mov rdi, 1
-    syscall
-
-.error:
-    mov rdx, usage_len
-    mov rsi, usage
-    mov rdi, 2
-    mov rax, SYS_WRITE
-    syscall
-
-    mov rax, SYS_EXIT
-    mov rdi, 1
-    syscall
+section .data
+filename db 'asm01', 0
+open_error db 'Erreur: impossible d ouvrir le fichier.', 0xA, 0
+open_error_len equ $ - open_error
+lseek_error db 'Erreur: impossible de deplacer le curseur.', 0xA, 0
+lseek_error_len equ $ - lseek_error
+write_error db 'Erreur: impossible d ecrire dans le fichier.', 0xA, 0
+write_error_len equ $ - write_error
+new_message db 'H4CK', 0xA
