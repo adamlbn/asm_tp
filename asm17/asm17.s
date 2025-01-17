@@ -37,13 +37,27 @@ _start:
     test al, al
     jz .done
 
+    ; Gestion des lettres minuscules
     cmp al, 'a'
-    jb .store_char
+    jb .check_upper
     cmp al, 'z'
-    ja .store_char
+    ja .check_upper
 
     add al, r12b
     cmp al, 'z'
+    jbe .store_char
+    sub al, 26
+    jmp .store_char
+
+.check_upper:
+    ; Gestion des lettres majuscules
+    cmp al, 'A'
+    jb .store_char
+    cmp al, 'Z'
+    ja .store_char
+
+    add al, r12b
+    cmp al, 'Z'
     jbe .store_char
     sub al, 26
 
