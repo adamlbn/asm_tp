@@ -1,11 +1,3 @@
-; asm20 : Serveur TCP multi‑clients sur le port 4242
-; Gère les commandes suivantes :
-;   - PING      → renvoie "PONG\n"
-;   - REVERSE X → renvoie X inversé suivi d'un saut de ligne
-;   - EXIT      → renvoie "Goodbye!\n" puis ferme la connexion
-; Pour toute autre commande, renvoie "Unknown command\n"
-; Utilise fork pour gérer plusieurs clients simultanément.
-
 section .data
     SYS_SOCKET   equ 41
     SYS_BIND     equ 49
@@ -25,7 +17,7 @@ section .data
     ; sin_family = AF_INET, sin_port = htons(4242) = 0x9210, sin_addr = INADDR_ANY (0)
     sockaddr_in_listen:
         dw AF_INET
-        dw 0x9210         ; port 4242 en ordre réseau (4242 = 0x1092 → 0x9210)
+        dw 0x9210         ; 4242 en ordre réseau
         dd 0              ; INADDR_ANY
         times 8 db 0
 
@@ -111,19 +103,21 @@ _start:
     jl .accept_loop
     mov [client_sock], rax
 
-    ; Création d'un processus enfant pour gérer le client
+    ; Création d'un processus enfant pour traiter le client
     mov rax, SYS_FORK
     syscall
     cmp rax, 0
     je .child
-    ; Parent : fermer le socket client et reprendre l'écoute
+    ; Parent : fermeture du socket client et retour à l'écoute
     mov rax, SYS_CLOSE
     mov rdi, [client_sock]
     syscall
     jmp .accept_loop
 
 .child:
-    ; Dans l'enfant, fermer le socket d'écoute
+    ; Dans l'enfant, on place le descripteur client dans r12
+    mov r12, [client_sock]
+    ; Fermeture de la socket d'écoute dans l'enfant
     mov rax, SYS_CLOSE
     mov rdi, [listen_sock]
     syscall
@@ -131,19 +125,19 @@ _start:
 .client_loop:
     ; Envoi du prompt au client
     mov rax, SYS_WRITE
-    mov rdi, [client_sock]
+    mov rdi, r12
     lea rsi, [prompt_str]
     mov rdx, prompt_len
     syscall
 
-    ; Lecture de la commande envoyée par le client
+    ; Lecture de la commande du client
     mov rax, SYS_READ
-    mov rdi, [client_sock]
+    mov rdi, r12
     lea rsi, [command_buffer]
     mov rdx, 256
     syscall
     cmp rax, 1
-    jle .exit_child         ; si rien n'est lu, quitter
+    jle .exit_child         ; si lecture nulle ou d'un seul caractère, quitter
     mov rcx, rax            ; nombre d'octets lus
 
     ; Comparaison avec "PING"
@@ -178,7 +172,7 @@ _start:
 
     ; Commande inconnue
     mov rax, SYS_WRITE
-    mov rdi, [client_sock]
+    mov rdi, r12
     lea rsi, [unknown_str]
     mov rdx, unknown_len
     syscall
@@ -187,17 +181,16 @@ _start:
 .handle_ping:
     ; Réponse à PING : envoi de "PONG\n"
     mov rax, SYS_WRITE
-    mov rdi, [client_sock]
+    mov rdi, r12
     lea rsi, [pong_str]
     mov rdx, pong_len
     syscall
     jmp .client_loop
 
 .handle_reverse:
-    ; Pour REVERSE, le texte à inverser se trouve après "REVERSE "
+    ; Calculer la longueur du texte à inverser (après "REVERSE ")
     mov rbx, rcx
-    sub rbx, reverse_prefix_len   ; longueur du texte
-    ; Retirer le saut de ligne éventuel (LF ou CR) en fin de chaîne
+    sub rbx, reverse_prefix_len
     cmp rbx, 0
     jle .client_loop
     mov rdx, rbx
@@ -213,12 +206,11 @@ _start:
 .remove_newline:
     dec rbx
 .do_reverse:
-    ; rbx contient la longueur utile du texte à inverser
     lea rdi, [command_buffer + reverse_prefix_len]
     add rdi, rbx
-    dec rdi       ; rdi pointe sur le dernier caractère
-    xor r8, r8    ; index = 0
-    mov r9, rbx   ; nombre de caractères
+    dec rdi           ; rdi pointe sur le dernier caractère
+    xor r8, r8        ; index = 0
+    mov r9, rbx      ; nombre de caractères à inverser
     lea r10, [reverse_buffer]
 .reverse_loop:
     cmp r8, r9
@@ -231,21 +223,21 @@ _start:
 .done_reverse:
     ; Envoi du texte inversé suivi d'un saut de ligne
     mov rax, SYS_WRITE
-    mov rdi, [client_sock]
+    mov rdi, r12
     lea rsi, [reverse_buffer]
     mov rdx, r9
     syscall
     mov rax, SYS_WRITE
-    mov rdi, [client_sock]
+    mov rdi, r12
     lea rsi, [newline]
     mov rdx, newline_len
     syscall
     jmp .client_loop
 
 .handle_exit:
-    ; Réponse à EXIT : envoi de "Goodbye!\n" puis fermeture de la connexion
+    ; Réponse à EXIT : "Goodbye!\n" puis fermeture
     mov rax, SYS_WRITE
-    mov rdi, [client_sock]
+    mov rdi, r12
     lea rsi, [goodbye_str]
     mov rdx, goodbye_len
     syscall
@@ -253,7 +245,7 @@ _start:
 
 .exit_child:
     mov rax, SYS_CLOSE
-    mov rdi, [client_sock]
+    mov rdi, r12
     syscall
     mov rax, SYS_EXIT
     xor rdi, rdi
@@ -268,14 +260,10 @@ exit_error:
     mov rdi, 1
     syscall
 
-;-----------------------------------------
-; Fonction strncmp : compare rdx octets de deux chaînes
-; Renvoie 0 si égales, 1 sinon.
-; Arguments en entrée :
-;   RDI : adresse de la première chaîne
-;   RSI : adresse de la seconde chaîne
-;   RDX : nombre d'octets à comparer
-;-----------------------------------------
+;-----------------------------------------------------
+; Fonction strncmp : compare RDX octets des chaînes pointées par RDI et RSI.
+; Retourne 0 si égales, 1 sinon.
+;-----------------------------------------------------
 strncmp:
     push rbx
     mov rcx, rdx
