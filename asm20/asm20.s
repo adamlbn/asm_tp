@@ -13,11 +13,11 @@ section .data
     SOCK_STREAM  equ 1
     IPPROTO_TCP  equ 6
 
-    ; Structure sockaddr_in pour écouter sur le port 4242 (16 octets)
+    ; Structure sockaddr_in pour écouter sur le port TCP 4242 (16 octets)
     ; sin_family = AF_INET, sin_port = htons(4242) = 0x9210, sin_addr = INADDR_ANY (0)
     sockaddr_in_listen:
         dw AF_INET
-        dw 0x9210         ; port 4242 en réseau (4242 = 0x1092 → 0x9210)
+        dw 0x9210         ; port 4242 en réseau
         dd 0              ; INADDR_ANY
         times 8 db 0
 
@@ -36,12 +36,15 @@ section .data
     unknown_str: db "Unknown command", 0xA
     unknown_len equ $ - unknown_str
 
-    ; Les commandes sont définies sans caractère nul et avec longueur fixe.
-    reverse_prefix: db "REVERSE "
-    reverse_prefix_len equ 8
-
+    ; Définition des commandes avec préfixe sans caractère nul
     ping_str: db "PING"
     ping_str_len equ 4
+
+    echo_prefix: db "ECHO "
+    echo_prefix_len equ 5
+
+    reverse_prefix: db "REVERSE "
+    reverse_prefix_len equ 8
 
     exit_str: db "EXIT"
     exit_str_len equ 4
@@ -104,7 +107,7 @@ _start:
     jl .accept_loop
     mov [client_sock], rax
 
-    ; Fork pour gérer le client
+    ; Création d'un processus enfant pour gérer le client
     mov rax, SYS_FORK
     syscall
     cmp rax, 0
@@ -140,7 +143,7 @@ _start:
     jle .exit_child         ; si lecture nulle ou d'un seul caractère, quitter
     mov rcx, rax            ; nombre d'octets lus
 
-    ; Comparaison avec "PING" (on compare les 4 premiers octets)
+    ; Comparaison avec "PING"
     lea rdi, [command_buffer]
     lea rsi, [ping_str]
     mov rdx, ping_str_len
@@ -150,7 +153,17 @@ _start:
     cmp rax, 0
     je .handle_ping
 
-    ; Comparaison avec "REVERSE " (8 premiers octets)
+    ; Comparaison avec "ECHO " (nouveau traitement)
+    lea rdi, [command_buffer]
+    lea rsi, [echo_prefix]
+    mov rdx, echo_prefix_len
+    push rcx
+    call strncmp
+    pop rcx
+    cmp rax, 0
+    je .handle_echo
+
+    ; Comparaison avec "REVERSE "
     lea rdi, [command_buffer]
     lea rsi, [reverse_prefix]
     mov rdx, reverse_prefix_len
@@ -187,13 +200,39 @@ _start:
     syscall
     jmp .client_loop
 
+.handle_echo:
+    ; Pour ECHO, renvoyer le texte après "ECHO "
+    mov rbx, rcx
+    sub rbx, echo_prefix_len   ; longueur du texte après le préfixe
+    cmp rbx, 0
+    jle .client_loop
+    ; Retirer le saut de ligne éventuel (LF ou CR)
+    mov rdx, rbx
+    dec rdx
+    lea rdi, [command_buffer + echo_prefix_len]
+    add rdi, rdx
+    mov al, byte [rdi]
+    cmp al, 0xA
+    je .remove_echo_newline
+    cmp al, 0xD
+    je .remove_echo_newline
+    jmp .do_echo
+.remove_echo_newline:
+    dec rbx
+.do_echo:
+    mov rax, SYS_WRITE
+    mov rdi, r12
+    lea rsi, [command_buffer + echo_prefix_len]
+    mov rdx, rbx
+    syscall
+    jmp .client_loop
+
 .handle_reverse:
-    ; Calcul de la longueur du texte à inverser (après "REVERSE ")
+    ; Calculer la longueur du texte à inverser (après "REVERSE ")
     mov rbx, rcx
     sub rbx, reverse_prefix_len
     cmp rbx, 0
     jle .client_loop
-    ; On retire le saut de ligne éventuel (LF ou CR)
     mov rdx, rbx
     dec rdx
     lea rdi, [command_buffer + reverse_prefix_len]
