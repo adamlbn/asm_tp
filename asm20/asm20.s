@@ -13,11 +13,11 @@ section .data
     SOCK_STREAM  equ 1
     IPPROTO_TCP  equ 6
 
-    ; Structure sockaddr_in pour écouter sur le port TCP 4242
+    ; Structure sockaddr_in pour écouter sur le port 4242 (16 octets)
     ; sin_family = AF_INET, sin_port = htons(4242) = 0x9210, sin_addr = INADDR_ANY (0)
     sockaddr_in_listen:
         dw AF_INET
-        dw 0x9210         ; 4242 en ordre réseau
+        dw 0x9210         ; port 4242 en réseau (4242 = 0x1092 → 0x9210)
         dd 0              ; INADDR_ANY
         times 8 db 0
 
@@ -28,29 +28,30 @@ section .data
     prompt_len   equ $ - prompt_str
 
     pong_str: db "PONG", 0xA
-    pong_len: equ $ - pong_str
+    pong_len equ $ - pong_str
 
     goodbye_str: db "Goodbye!", 0xA
-    goodbye_len: equ $ - goodbye_str
+    goodbye_len equ $ - goodbye_str
 
     unknown_str: db "Unknown command", 0xA
-    unknown_len: equ $ - unknown_str
+    unknown_len equ $ - unknown_str
 
-    reverse_prefix: db "REVERSE ", 0
-    reverse_prefix_len equ $ - reverse_prefix
+    ; Les commandes sont définies sans caractère nul et avec longueur fixe.
+    reverse_prefix: db "REVERSE "
+    reverse_prefix_len equ 8
 
-    ping_str: db "PING", 0
-    ping_str_len equ $ - ping_str
+    ping_str: db "PING"
+    ping_str_len equ 4
 
-    exit_str: db "EXIT", 0
-    exit_str_len equ $ - exit_str
+    exit_str: db "EXIT"
+    exit_str_len equ 4
 
     newline: db 0xA
-    newline_len: equ $ - newline
+    newline_len equ $ - newline
 
 section .bss
-    listen_sock   resq 1
-    client_sock   resq 1
+    listen_sock resq 1
+    client_sock resq 1
     command_buffer resb 256
     reverse_buffer resb 256
 
@@ -103,7 +104,7 @@ _start:
     jl .accept_loop
     mov [client_sock], rax
 
-    ; Création d'un processus enfant pour traiter le client
+    ; Fork pour gérer le client
     mov rax, SYS_FORK
     syscall
     cmp rax, 0
@@ -115,9 +116,8 @@ _start:
     jmp .accept_loop
 
 .child:
-    ; Dans l'enfant, on place le descripteur client dans r12
+    ; Dans l'enfant, stocker le socket client dans r12 et fermer la socket d'écoute
     mov r12, [client_sock]
-    ; Fermeture de la socket d'écoute dans l'enfant
     mov rax, SYS_CLOSE
     mov rdi, [listen_sock]
     syscall
@@ -130,7 +130,7 @@ _start:
     mov rdx, prompt_len
     syscall
 
-    ; Lecture de la commande du client
+    ; Lecture de la commande envoyée par le client
     mov rax, SYS_READ
     mov rdi, r12
     lea rsi, [command_buffer]
@@ -140,7 +140,7 @@ _start:
     jle .exit_child         ; si lecture nulle ou d'un seul caractère, quitter
     mov rcx, rax            ; nombre d'octets lus
 
-    ; Comparaison avec "PING"
+    ; Comparaison avec "PING" (on compare les 4 premiers octets)
     lea rdi, [command_buffer]
     lea rsi, [ping_str]
     mov rdx, ping_str_len
@@ -150,7 +150,7 @@ _start:
     cmp rax, 0
     je .handle_ping
 
-    ; Comparaison avec "REVERSE "
+    ; Comparaison avec "REVERSE " (8 premiers octets)
     lea rdi, [command_buffer]
     lea rsi, [reverse_prefix]
     mov rdx, reverse_prefix_len
@@ -179,7 +179,7 @@ _start:
     jmp .client_loop
 
 .handle_ping:
-    ; Réponse à PING : envoi de "PONG\n"
+    ; Répond "PONG\n"
     mov rax, SYS_WRITE
     mov rdi, r12
     lea rsi, [pong_str]
@@ -188,11 +188,12 @@ _start:
     jmp .client_loop
 
 .handle_reverse:
-    ; Calculer la longueur du texte à inverser (après "REVERSE ")
+    ; Calcul de la longueur du texte à inverser (après "REVERSE ")
     mov rbx, rcx
     sub rbx, reverse_prefix_len
     cmp rbx, 0
     jle .client_loop
+    ; On retire le saut de ligne éventuel (LF ou CR)
     mov rdx, rbx
     dec rdx
     lea rdi, [command_buffer + reverse_prefix_len]
@@ -235,7 +236,7 @@ _start:
     jmp .client_loop
 
 .handle_exit:
-    ; Réponse à EXIT : "Goodbye!\n" puis fermeture
+    ; Répond "Goodbye!\n" puis ferme la connexion
     mov rax, SYS_WRITE
     mov rdi, r12
     lea rsi, [goodbye_str]
