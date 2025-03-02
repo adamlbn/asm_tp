@@ -11,17 +11,15 @@ section .data
     SOCK_DGRAM   equ 2
     IPPROTO_UDP  equ 17
 
-    ; Définition d'une structure sockaddr_in (16 octets)
+    ; Structure sockaddr_in (16 octets)
     sockaddr_in:
-        dw AF_INET          ; sin_family (2 octets)
-        dw 0x3905           ; sin_port en ordre réseau (en mémoire : 05 39 = 1337)
-        dd 0x0100007F      ; sin_addr (127.0.0.1 en ordre réseau)
-        times 8 db 0        ; sin_zero (8 octets)
+        dw AF_INET          ; sin_family
+        dw 0x3905           ; sin_port en ordre réseau (05 39 = 1337)
+        dd 0x0100007F      ; sin_addr (127.0.0.1)
+        times 8 db 0        ; sin_zero
 
-    ; Timeout de 1 seconde (tv_sec=1, tv_usec=0)
-    timeout:
-        dd 1
-        dd 0
+    ; Timeout de 1 seconde (structure timeval sur 16 octets : tv_sec, tv_usec)
+    timeout     dq 1, 0
 
     request     db "Hello, server!", 0
     request_len equ $ - request
@@ -32,9 +30,9 @@ section .data
     timeout_msg_len equ $ - timeout_msg
 
 section .bss
-    sockfd resq 1      ; un quadword pour la socket
+    sockfd resq 1
     addr_len resq 1
-    readfds resb 128   ; espace pour le fd_set
+    readfds resb 128
 
 section .text
 global _start
@@ -55,9 +53,9 @@ _start:
     mov rdi, [sockfd]
     lea rsi, [request]
     mov rdx, request_len
-    mov r10, 0               ; flags = 0
-    lea r8, [sockaddr_in]    ; adresse du serveur
-    mov r9, 16               ; taille de sockaddr_in
+    mov r10, 0              ; flags
+    lea r8, [sockaddr_in]
+    mov r9, 16              ; taille de sockaddr_in
     syscall
     cmp rax, 0
     jl .close_socket
@@ -67,41 +65,42 @@ _start:
     mov rcx, 128/8
     xor rax, rax
     rep stosq
-    ; On place le bit correspondant à la socket dans readfds
     mov eax, dword [sockfd]
     bts dword [readfds], eax
 
     ; Appel de SYS_SELECT pour attendre la réponse avec timeout
     mov rax, SYS_SELECT
     mov rdi, [sockfd]
-    add rdi, 1               ; nfds = sockfd + 1
+    add rdi, 1              ; nfds = sockfd + 1
     lea rsi, [readfds]
-    mov rdx, 0               ; writefds = NULL
-    mov r10, 0               ; exceptfds = NULL
-    lea r8, [timeout]        ; délai d'attente
+    mov rdx, 0              ; writefds = NULL
+    mov r10, 0              ; exceptfds = NULL
+    lea r8, [timeout]       ; délai d'attente
     syscall
     cmp rax, 0
-    jle .timeout             ; en cas d'erreur ou de timeout
+    jle .timeout            ; si 0 (timeout) ou erreur, on va dans .timeout
+
+    ; Initialiser addr_len avec la taille de sockaddr_in (16 octets)
+    mov qword [addr_len], 16
 
     ; Réception de la réponse
     mov rax, SYS_RECVFROM
     mov rdi, [sockfd]
     lea rsi, [response]
     mov rdx, 256
-    mov r10, 0               ; flags = 0
-    lea r8, [sockaddr_in]    ; (on peut réutiliser sockaddr_in pour récupérer l'adresse d'envoi)
+    mov r10, 0              ; flags
+    lea r8, [sockaddr_in]   ; on réutilise sockaddr_in pour récupérer l'adresse
     lea r9, [addr_len]
     syscall
     cmp rax, 0
     jl .close_socket
-    ; Sauvegarder le nombre d’octets reçus (dans rax) pour l'écrire
-    mov rbx, rax
+    mov rbx, rax            ; sauvegarde du nombre d’octets reçus
 
-    ; Affichage de la réponse sur la sortie standard
-    mov rax, 1               ; SYS_WRITE
-    mov rdi, 1               ; fd = stdout
+    ; Affichage de la réponse sur stdout
+    mov rax, 1              ; SYS_WRITE
+    mov rdi, 1              ; fd = stdout
     lea rsi, [response]
-    mov rdx, rbx             ; nombre d'octets reçus
+    mov rdx, rbx
     syscall
 
     ; Fermeture de la socket et sortie avec code 0
@@ -114,7 +113,7 @@ _start:
     syscall
 
 .timeout:
-    ; Message en cas de timeout et sortie avec code 1
+    ; Message de timeout et sortie avec code 1
     mov rax, 1
     mov rdi, 1
     lea rsi, [timeout_msg]
