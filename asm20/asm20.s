@@ -13,8 +13,6 @@ section .data
     SOCK_STREAM  equ 1
     IPPROTO_TCP  equ 6
 
-    ; Structure sockaddr_in pour écouter sur le port TCP 4242 (16 octets)
-    ; sin_family = AF_INET, sin_port = htons(4242) = 0x9210, sin_addr = INADDR_ANY (0)
     sockaddr_in_listen:
         dw AF_INET
         dw 0x9210         ; port 4242 en réseau
